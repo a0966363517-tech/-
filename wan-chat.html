@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>跟 Wan 聊天</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .header {
+      background: #252525;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ff6b6b, #feca57);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: bold;
+      color: #fff;
+    }
+    .header-info h1 { font-size: 16px; font-weight: 600; }
+    .header-info p { font-size: 12px; color: #888; }
+    .chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scroll-behavior: smooth;
+    }
+    .message {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 15px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .message.user {
+      align-self: flex-end;
+      background: #3a7bd5;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .message.bot {
+      align-self: flex-start;
+      background: #2d2d2d;
+      color: #e8e8e8;
+      border-bottom-left-radius: 4px;
+    }
+    .message .time {
+      font-size: 10px;
+      color: rgba(255,255,255,0.45);
+      margin-top: 4px;
+      text-align: right;
+    }
+    .message.bot .time { color: #666; text-align: left; }
+    .input-area {
+      background: #252525;
+      padding: 12px 16px;
+      display: flex;
+      gap: 10px;
+      border-top: 1px solid #333;
+      flex-shrink: 0;
+      align-items: flex-end;
+    }
+    #userInput {
+      flex: 1;
+      background: #333;
+      border: none;
+      border-radius: 20px;
+      padding: 12px 16px;
+      color: #fff;
+      font-size: 15px;
+      resize: none;
+      max-height: 120px;
+      outline: none;
+      font-family: inherit;
+    }
+    #userInput::placeholder { color: #777; }
+    #sendBtn {
+      background: #3a7bd5;
+      border: none;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 18px;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #sendBtn:disabled { background: #555; cursor: not-allowed; }
+    .typing {
+      align-self: flex-start;
+      background: #2d2d2d;
+      padding: 12px 16px;
+      border-radius: 18px;
+      border-bottom-left-radius: 4px;
+      display: none;
+    }
+    .typing span {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      background: #888;
+      border-radius: 50%;
+      margin: 0 2px;
+      animation: bounce 1.2s infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: 0.2s; }
+    .typing span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-6px); }
+    }
+    .system-note {
+      text-align: center;
+      font-size: 12px;
+      color: #666;
+      margin: 8px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="avatar">W</div>
+    <div class="header-info">
+      <h1>Wan</h1>
+      <p>在線</p>
+    </div>
+  </div>
+
+  <div class="chat-container" id="chatContainer">
+    <div class="system-note">開始聊天吧</div>
+  </div>
+
+  <div class="typing" id="typing">
+    <span></span><span></span><span></span>
+  </div>
+
+  <div class="input-area">
+    <textarea id="userInput" rows="1" placeholder="輸入訊息..." enterkeyhint="send"></textarea>
+    <button id="sendBtn" onclick="sendMessage()">➤</button>
+  </div>
+
+  <script>
+    function getTime() {
+      const now = new Date();
+      return now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+    }
+
+    function pick(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function getWanReply(userText) {
+      const t = userText.trim().toLowerCase();
+
+      // 打招呼
+      if (/^(嗨|哈囉|你好|hello|hi|嘿|安安)/.test(t)) {
+        return pick(["嗨", "欸", "幹嘛", "嗯？", "有事？"]);
+      }
+      if (/早安|早啊|早上好/.test(t)) {
+        return pick(["早安", "早", "你很早欸", "嗯早"]);
+      }
+      if (/晚安|晚啊|睡了|去睡/.test(t)) {
+        return pick(["晚安", "掰", "你先睡", "早點休息", "晚安啦"]);
+      }
+
+      // 約見面 / 找她
+      if (/見面|出來|約|去你家|來我家|載你|找你|一起出去|去哪玩/.test(t)) {
+        return pick([
+          "不要啦",
+          "我懶得出門",
+          "現在不想",
+          "你自己去玩",
+          "我需要休息",
+          "晚點再說好了",
+          "蛤你要幹嘛",
+          "先不要"
+        ]);
+      }
+
+      // 喜歡 / 告白 / 感情
+      if (/喜歡你|愛你|在一起|交往|告白|想你|當我女朋友|做我女友/.test(t)) {
+        return pick([
+          "不要喜歡我啦",
+          "我是渣女（？",
+          "免得麻煩",
+          "朋友就朋友",
+          "你找別人玩比較快樂",
+          "我本人就是這麼難相處😂",
+          "順其自然",
+          "不要亂講",
+          "蛤你認真？"
+        ]);
+      }
+      if (/分手|不要理我|封鎖|刪除|滾/.test(t)) {
+        return pick(["好喔", "隨便你", "嗯", "看你", "掰"]);
+      }
+
+      // 關心類
+      if (/累嗎|辛苦|睡覺|休息|身體|吃了嗎|餓不餓|還好嗎|怎麼了/.test(t)) {
+        return pick([
+          "還好",
+          "有點累",
+          "我在忙",
+          "你也早點休息",
+          "嗯嗯知道了",
+          "謝謝關心",
+          "還行",
+          "沒事啦"
+        ]);
+      }
+      if (/吃飯|吃什麼|要不要吃|一起吃飯/.test(t)) {
+        return pick(["我自己吃", "不用", "晚點再說", "我懶得出去", "好喔看情況"]);
+      }
+
+      // 問太多問題
+      if (/為什麼|怎麼會|什麼時候|哪裡|誰啊|怎樣|你是不是|你有沒有/.test(t) && t.length > 6) {
+        return pick([
+          "問太多了",
+          "不想回答",
+          "你是在身家調查喔",
+          "蛤",
+          "懶得說",
+          "你自己想",
+          "哈啊哈哈不要問那麼多",
+          "這很重要嗎"
+        ]);
+      }
+
+      // 謝謝 / 道歉
+      if (/謝謝|感謝|謝啦|謝了/.test(t)) {
+        return pick(["不客氣", "嗯嗯", "好喔", "小事", "掰"]);
+      }
+      if (/抱歉|對不起|不好意思|我錯了/.test(t)) {
+        return pick(["沒事", "好喔", "知道了", "嗯", "下次注意"]);
+      }
+
+      // 特定主題
+      if (/工作|上班|加班|下班/.test(t)) {
+        return pick(["你也是喔", "辛苦了", "早點休息", "我知道", "好喔"]);
+      }
+      if (/貓|貓咪|狗|寵物/.test(t)) {
+        return pick(["哈哈", "可愛", "喔喔", "真的假的", "好喔"]);
+      }
+      if (/天氣|好熱|好冷|下雨/.test(t)) {
+        return pick(["對啊", "超煩", "是啊", "還好", "嗯"]);
+      }
+      if (/笑死|哈哈|好笑|有趣/.test(t)) {
+        return pick(["笑死", "哈啊哈哈", "超好笑", "北七", "幹"]);
+      }
+
+      // 被罵
+      if (/笨|白痴|智障|靠北|機車|王八蛋|去死|靠腰/.test(t)) {
+        return pick([
+          "你講三小",
+          "北七",
+          "笑死你認真的？",
+          "蛤你在說什麼",
+          "問號",
+          "傻眼",
+          "你是不是有病",
+          "好可怕哈哈哈哈"
+        ]);
+      }
+
+      // 短句
+      if (t.length <= 4) {
+        return pick(["蛤", "嗯", "喔", "好喔", "真假", "然後呢"]);
+      }
+
+      // 有問號
+      if (t.includes("？") || t.includes("?")) {
+        return pick([
+          "我不知道欸",
+          "你自己想",
+          "蛤",
+          "可能吧",
+          "看你啊",
+          "這很重要嗎",
+          "懶得回長的"
+        ]);
+      }
+
+      // 預設
+      return pick([
+        "喔喔喔",
+        "好喔",
+        "這樣啊",
+        "真的假的",
+        "蛤",
+        "然後呢",
+        "我知道了",
+        "隨便啦",
+        "看你",
+        "我懶得回長的",
+        "哈啊哈哈",
+        "笑死",
+        "北七",
+        "你講三小",
+        "嗯嗯"
+      ]);
+    }
+
+    const chatContainer = document.getElementById('chatContainer');
+    const userInput = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const typing = document.getElementById('typing');
+
+    function addMessage(text, isUser) {
+      const div = document.createElement('div');
+      div.className = 'message ' + (isUser ? 'user' : 'bot');
+      div.innerHTML = text.replace(/\n/g, '<br>') + `<div class="time">${getTime()}</div>`;
+      chatContainer.appendChild(div);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function showTyping(show) {
+      typing.style.display = show ? 'block' : 'none';
+      if (show) chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const text = userInput.value.trim();
+      if (!text) return;
+
+      addMessage(text, true);
+      userInput.value = '';
+      userInput.style.height = 'auto';
+      sendBtn.disabled = true;
+
+      showTyping(true);
+      const delay = 700 + Math.random() * 1100;
+      await new Promise(r => setTimeout(r, delay));
+      showTyping(false);
+
+      const reply = getWanReply(text);
+      addMessage(reply, false);
+      sendBtn.disabled = false;
+      userInput.focus();
+    }
+
+    userInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    userInput.addEventListener('input', () => {
+      userInput.style.height = 'auto';
+      userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+    });
+
+    setTimeout(() => {
+      addMessage("欸", false);
+    }, 500);
+  </script>
+</body>
+</html>
