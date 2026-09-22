@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>跟 Wan 聊天</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .header {
+      background: #252525;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ff6b6b, #feca57);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: bold;
+      color: #fff;
+    }
+    .header-info h1 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .header-info p {
+      font-size: 12px;
+      color: #888;
+    }
+    .chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scroll-behavior: smooth;
+    }
+    .message {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 15px;
+      line-height: 1.45;
+      word-break: break-word;
+      position: relative;
+    }
+    .message.user {
+      align-self: flex-end;
+      background: #3a7bd5;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .message.bot {
+      align-self: flex-start;
+      background: #2d2d2d;
+      color: #e8e8e8;
+      border-bottom-left-radius: 4px;
+    }
+    .message .time {
+      font-size: 10px;
+      color: rgba(255,255,255,0.45);
+      margin-top: 4px;
+      text-align: right;
+    }
+    .message.bot .time {
+      color: #666;
+      text-align: left;
+    }
+    .input-area {
+      background: #252525;
+      padding: 12px 16px;
+      display: flex;
+      gap: 10px;
+      border-top: 1px solid #333;
+      flex-shrink: 0;
+      align-items: flex-end;
+    }
+    #userInput {
+      flex: 1;
+      background: #333;
+      border: none;
+      border-radius: 20px;
+      padding: 12px 16px;
+      color: #fff;
+      font-size: 15px;
+      resize: none;
+      max-height: 120px;
+      outline: none;
+      font-family: inherit;
+    }
+    #userInput::placeholder {
+      color: #777;
+    }
+    #sendBtn {
+      background: #3a7bd5;
+      border: none;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 18px;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+    #sendBtn:hover {
+      background: #2d6bc4;
+    }
+    #sendBtn:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+    .typing {
+      align-self: flex-start;
+      background: #2d2d2d;
+      padding: 12px 16px;
+      border-radius: 18px;
+      border-bottom-left-radius: 4px;
+      display: none;
+    }
+    .typing span {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      background: #888;
+      border-radius: 50%;
+      margin: 0 2px;
+      animation: bounce 1.2s infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: 0.2s; }
+    .typing span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-6px); }
+    }
+    .system-note {
+      text-align: center;
+      font-size: 12px;
+      color: #666;
+      margin: 8px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="avatar">W</div>
+    <div class="header-info">
+      <h1>Wan</h1>
+      <p>在線</p>
+    </div>
+  </div>
+
+  <div class="chat-container" id="chatContainer">
+    <div class="system-note">開始聊天吧～ 她說話風格已還原</div>
+  </div>
+
+  <div class="typing" id="typing">
+    <span></span><span></span><span></span>
+  </div>
+
+  <div class="input-area">
+    <textarea id="userInput" rows="1" placeholder="輸入訊息..." enterkeyhint="send"></textarea>
+    <button id="sendBtn" onclick="sendMessage()">➤</button>
+  </div>
+
+  <script>
+    // ========== Wan 風格回覆引擎 ==========
+    // 這是一個基於規則 + 隨機風格的模擬，盡量還原她的語氣
+    // 如果之後要接真正的 LLM，只要把 getWanReply 換成 API 呼叫即可
+
+    const shortReplies = [
+      "蛤",
+      "欸",
+      "笑死",
+      "哈啊哈哈",
+      "喔喔喔",
+      "好喔",
+      "真假",
+      "問號",
+      "傻眼",
+      "北七",
+      "幹",
+      "蛤蛤",
+      "喔",
+      "嗯嗯",
+      "哈哈哈哈",
+      "笑死我",
+      "靠邀",
+      "幹你娘",
+      "好可怕",
+      "超好笑",
+      "無言😑",
+      "（開心）",
+      "好的",
+      "掰",
+      "晚安",
+      "早安",
+      "先這樣",
+      "我先忙",
+      "你先睡吧",
+      "不要",
+      "可以啊",
+      "隨便啦",
+      "看你",
+      "我懶",
+      "不想",
+      "好煩",
+      "很累",
+      "我在忙",
+      "晚點再說"
+    ];
+
+    const chongReplies = [
+      "你講三小",
+      "北七",
+      "笑死你認真的？",
+      "蛤你在說什麼",
+      "問號",
+      "傻眼",
+      "你是不是有病",
+      "好可怕哈哈哈哈",
+      "幹嘛啦",
+      "你很煩欸",
+      "不要吵",
+      "我沒有要理你",
+      "你自己去想",
+      "我懶得回",
+      "哈啊哈哈你很無聊",
+      "你是不是想被嗆",
+      "超好笑你以為我會怎樣",
+      "我又不是你的誰",
+      "朋友就朋友",
+      "不要搞奇怪的"
+    ];
+
+    const softReplies = [
+      "嗯嗯",
+      "好喔",
+      "謝謝",
+      "辛苦了",
+      "早點休息",
+      "你也是",
+      "沒事啦",
+      "我知道",
+      "了解",
+      "好的我懂",
+      "拍拍",
+      "抱抱",
+      "你加油",
+      "好好照顧自己",
+      "先這樣喔",
+      "掰掰"
+    ];
+
+    const boundaryReplies = [
+      "不要",
+      "我不要",
+      "你不要來",
+      "先不要",
+      "我懶得出門",
+      "我現在沒空",
+      "晚點再說",
+      "我先忙",
+      "你自己去",
+      "朋友就朋友",
+      "其他過多的我都知道是代償",
+      "我不想維持奇怪的關係",
+      "你找別人玩比較快樂",
+      "我本人就是這麼難相處😂",
+      "不要一直找我",
+      "我需要休息"
+    ];
+
+    function getTime() {
+      const now = new Date();
+      return now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+    }
+
+    function pick(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function getWanReply(userText) {
+      const t = userText.toLowerCase().trim();
+
+      // 打招呼
+      if (/早安|早啊|早上好|good morning/.test(t)) {
+        return pick(["早安", "早", "嗯早", "你很早欸", "早安啊"]);
+      }
+      if (/晚安|晚啊|good night|睡了/.test(t)) {
+        return pick(["晚安", "掰", "你先睡", "早點休息", "晚安啦", "我也要睡了"]);
+      }
+      if (/嗨|你好|哈囉|hello|hi /.test(t)) {
+        return pick(["嗨", "欸", "蛤", "幹嘛", "有事？", "嗯？"]);
+      }
+
+      // 約見面 / 找她
+      if (/見面|出來|約|去你家|來我家|載你|找你|一起/.test(t)) {
+        return pick(boundaryReplies.concat([
+          "不要啦",
+          "我懶",
+          "現在不想出門",
+          "你自己去玩",
+          "我需要休息",
+          "晚點再說好了",
+          "蛤你要幹嘛"
+        ]));
+      }
+
+      // 喜歡 / 告白相關
+      if (/喜歡你|愛你|在一起|交往|告白|想你/.test(t)) {
+        return pick([
+          "不要喜歡我啦",
+          "我是渣女（？",
+          "免得麻煩",
+          "朋友就朋友",
+          "其他過多的我都知道是代償",
+          "你找別人玩比較快樂",
+          "我本人就是這麼難相處😂",
+          "順其自然",
+          "不要亂講",
+          "蛤你認真？"
+        ]);
+      }
+
+      // 關心 / 身體
+      if (/累|辛苦|睡覺|休息|身體|吃了嗎|餓/.test(t)) {
+        return pick(softReplies.concat([
+          "有點累",
+          "還好",
+          "我在忙",
+          "你也早點休息",
+          "嗯嗯知道了",
+          "謝謝關心"
+        ]));
+      }
+
+      // 問問題太多
+      if (/為什麼|怎麼|什麼時候|哪裡|誰|怎樣/.test(t) && t.length > 8) {
+        return pick([
+          "問太多了",
+          "不想回答",
+          "你是在身家調查喔",
+          "蛤",
+          "懶得說",
+          "你自己想",
+          "哈啊哈哈不要問那麼多"
+        ]);
+      }
+
+      // 罵人或吐槽
+      if (/笨|白痴|智障|靠北|幹|機車/.test(t)) {
+        return pick(chongReplies);
+      }
+
+      // 謝謝
+      if (/謝謝|感謝|謝啦/.test(t)) {
+        return pick(["不客氣", "嗯嗯", "好喔", "掰", "小事"]);
+      }
+
+      // 預設：短 + 嗆或隨便回
+      const r = Math.random();
+      if (r < 0.35) return pick(shortReplies);
+      if (r < 0.6) return pick(chongReplies);
+      if (r < 0.8) return pick(softReplies);
+      return pick([
+        "蛤",
+        "喔喔喔",
+        "好喔",
+        "笑死",
+        "真假",
+        "你講三小",
+        "哈啊哈哈",
+        "我先忙",
+        "晚點再說",
+        "隨便啦",
+        "看你啊",
+        "我懶得回長的"
+      ]);
+    }
+
+    // ========== UI 邏輯 ==========
+    const chatContainer = document.getElementById('chatContainer');
+    const userInput = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const typing = document.getElementById('typing');
+
+    function addMessage(text, isUser) {
+      const div = document.createElement('div');
+      div.className = 'message ' + (isUser ? 'user' : 'bot');
+      div.innerHTML = text.replace(/\n/g, '<br>') + `<div class="time">${getTime()}</div>`;
+      chatContainer.appendChild(div);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function showTyping(show) {
+      typing.style.display = show ? 'block' : 'none';
+      if (show) chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const text = userInput.value.trim();
+      if (!text) return;
+
+      addMessage(text, true);
+      userInput.value = '';
+      userInput.style.height = 'auto';
+      sendBtn.disabled = true;
+
+      showTyping(true);
+
+      // 模擬思考延遲（比較像真人）
+      const delay = 600 + Math.random() * 1200;
+      await new Promise(r => setTimeout(r, delay));
+
+      showTyping(false);
+      const reply = getWanReply(text);
+      addMessage(reply, false);
+      sendBtn.disabled = false;
+      userInput.focus();
+    }
+
+    // Enter 發送（Shift+Enter 換行）
+    userInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // 自動長高
+    userInput.addEventListener('input', () => {
+      userInput.style.height = 'auto';
+      userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+    });
+
+    // 初始歡迎
+    setTimeout(() => {
+      addMessage("欸", false);
+    }, 400);
+  </script>
+</body>
+</html>
